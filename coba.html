@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Self-Driving Car Neural Network</title>
+        <style>
+            canvas {
+                border: 1px solid black;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="carCanvas" width="800" height="600"></canvas>
+        <script>
+            // Canvas setup
+            const canvas = document.getElementById('carCanvas');
+            const ctx = canvas.getContext('2d');
+
+            // Neural Network Class
+            class NeuralNetwork {
+              constructor(inputNodes, hiddenNodes, outputNodes) {
+                this.inputNodes = inputNodes;
+                this.hiddenNodes = hiddenNodes;
+                this.outputNodes = outputNodes;
+                this.weightsIH = this.randomMatrix(hiddenNodes, inputNodes);
+                this.weightsHO = this.randomMatrix(outputNodes, hiddenNodes);
+                this.biasH = new Array(hiddenNodes).fill(0.1);
+                this.biasO = new Array(outputNodes).fill(0.1);
+                this.learningRate = 0.1;
+              }
+
+              randomMatrix(rows, cols) {
+                return Array(rows).fill().map(() => Array(cols).fill().map(() => Math.random() * 2 - 1));
+              }
+
+              sigmoid(x) {
+                return 1 / (1 + Math.exp(-x));
+              }
+
+              predict(inputs) {
+                // Input to Hidden
+                let hidden = new Array(this.hiddenNodes).fill(0);
+                for (let i = 0; i < this.hiddenNodes; i++) {
+                  for (let j = 0; j < this.inputNodes; j++) {
+                    hidden[i] += this.weightsIH[i][j] * inputs[j];
+                  }
+                  hidden[i] = this.sigmoid(hidden[i] + this.biasH[i]);
+                }
+
+                // Hidden to Output
+                let outputs = new Array(this.outputNodes).fill(0);
+                for (let i = 0; i < this.outputNodes; i++) {
+                  for (let j = 0; j < this.hiddenNodes; j++) {
+                    outputs[i] += this.weightsHO[i][j] * hidden[j];
+                  }
+                  outputs[i] = this.sigmoid(outputs[i] + this.biasO[i]);
+                }
+                return outputs;
+              }
+
+              train(inputs, targets) {
+                // Forward pass
+                let hidden = new Array(this.hiddenNodes).fill(0);
+                for (let i = 0; i < this.hiddenNodes; i++) {
+                  for (let j = 0; j < this.inputNodes; j++) {
+                    hidden[i] += this.weightsIH[i][j] * inputs[j];
+                  }
+                  hidden[i] = this.sigmoid(hidden[i] + this.biasH[i]);
+                }
+
+                let outputs = new Array(this.outputNodes).fill(0);
+                for (let i = 0; i < this.outputNodes; i++) {
+                  for (let j = 0; j < this.hiddenNodes; j++) {
+                    outputs[i] += this.weightsHO[i][j] * hidden[j];
+                  }
+                  outputs[i] = this.sigmoid(outputs[i] + this.biasO[i]);
+                }
+
+                // Calculate errors
+                let outputErrors = new Array(this.outputNodes);
+                for (let i = 0; i < this.outputNodes; i++) {
+                  outputErrors[i] = targets[i] - outputs[i];
+                }
+
+                // Backpropagation
+                for (let i = 0; i < this.outputNodes; i++) {
+                  for (let j = 0; j < this.hiddenNodes; j++) {
+                    let delta = outputErrors[i] * outputs[i] * (1 - outputs[i]);
+                    this.weightsHO[i][j] += this.learningRate * delta * hidden[j];
+                  }
+                  this.biasO[i] += this.learningRate * outputErrors[i];
+                }
+
+                let hiddenErrors = new Array(this.hiddenNodes).fill(0);
+                for (let i = 0; i < this.hiddenNodes; i++) {
+                  for (let j = 0; j < this.outputNodes; j++) {
+                    hiddenErrors[i] += outputErrors[j] * this.weightsHO[j][i];
+                  }
+                }
+
+                for (let i = 0; i < this.hiddenNodes; i++) {
+                  for (let j = 0; j < this.inputNodes; j++) {
+                    Ascending Order (Depth First Search)
+                    let delta = hiddenErrors[i] * hidden[i] * (1 - hidden[i]);
+                    this.weightsIH[i][j] += this.learningRate * delta * inputs[j];
+                  }
+                  this.biasH[i] += this.learningRate * hiddenErrors[i];
+                }
+              }
+            }
+
+            // Car Class
+            class Car {
+              constructor(x, y, isPlayer = false) {
+                this.x = x;
+                this.y = y;
+                this.width = 30;
+                this.height = 50;
+                this.speed = isPlayer ? 0 : 2 + Math.random() * 2;
+                this.angle = 0;
+                this.isPlayer = isPlayer;
+                if (isPlayer) {
+                  this.nn = new NeuralNetwork(5, 10, 2); // 5 inputs (sensors), 10 hidden, 2 outputs (speed, angle)
+                }
+                this.sensorData = [0, 0, 0, 0, 0]; // Front, left, right, speed, angle
+              }
+
+              update(otherCars) {
+                if (this.isPlayer) {
+                  // Update sensor data
+                  this.sensorData = this.getSensorData(otherCars);
+                  let outputs = this.nn.predict(this.sensorData);
+                  this.speed = outputs[0] * 5; // Max speed 5
+                  this.angle = (outputs[1] - 0.5) * Math.PI / 4; // Steering angle
+                }
+
+                this.x += Math.sin(this.angle) * this.speed;
+                this.y -= Math.cos(this.angle) * this.speed;
+
+                // Keep car in bounds
+                this.x = Math.max(this.width / 2, Math.min(canvas.width - this.width / 2, this.x));
+                this.y = Math.max(this.height / 2, Math.min(canvas.height - this.height / 2, this.y));
+              }
+
+              getSensorData(otherCars) {
+                let front = 0, left = 0, right = 0;
+                otherCars.forEach(car => {
+                  let dx = car.x - this.x;
+                  let dy = car.y - this.y;
+                  let distance = Math.sqrt(dx * dx + dy * dy);
+                  if (distance < 100) {
+                    if (Math.abs(dx) < 50 && dy < 0) front = 1 - distance / 100;
+                    if (dx < 0 && Math.abs(dx) < 50) left = 1 - distance / 100;
+                    if (dx > 0 && Math.abs(dx) < 50) right = 1 - distance / 100;
+                  }
+                });
+                return [front, left, right, this.speed / 5, this.angle / (Math.PI / 4)];
+              }
+
+              draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+                ctx.fillStyle = this.isPlayer ? 'blue' : 'red';
+                ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+                ctx.restore();
+              }
+            }
+
+            // Simulation Setup
+            const playerCar = new Car(canvas.width / 2, canvas.height - 100, true);
+            const otherCars = [
+              new Car(canvas.width / 4, canvas.height / 2),
+              new Car(canvas.width * 3 / 4, canvas.height / 2),
+              new Car(canvas.width / 2, canvas.height / 4),
+            ];
+
+            // Training Data Collection
+            let trainingData = [];
+
+            function simulate() {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+              // Update and draw all cars
+              playerCar.update(otherCars);
+              playerCar.draw();
+              otherCars.forEach(car => {
+                car.update(otherCars);
+                car.draw();
+              });
+
+              // Simple training logic: learn to avoid collisions and stay on optimal path
+              let idealOutputs = [1, 0.5]; // Full speed, straight
+              otherCars.forEach(car => {
+                if (Math.abs(car.x - playerCar.x) < 50 && car.y < playerCar.y) {
+                  idealOutputs[0] = 0.2; // Slow down
+                  idealOutputs[1] = car.x < playerCar.x ? 0.2 : 0.8; // Steer away
+                }
+              });
+
+              // Train neural network
+              playerCar.nn.train(playerCar.sensorData, idealOutputs);
+
+              // Save training data
+              trainingData.push({
+                inputs: [...playerCar.sensorData],
+                outputs: idealOutputs
+              });
+
+              // Periodically update neural network with best training data
+              if (trainingData.length > 1000) {
+                trainingData = trainingData.slice(-500); // Keep recent data
+                let bestData = trainingData.sort((a, b) => {
+                  let aScore = a.outputs[0]; // Prioritize higher speed
+                  let bScore = b.outputs[0];
+                  return bScore - aScore;
+                }).slice(0, 100); // Use top 100
+
+                bestData.forEach(data => {
+                  playerCar.nn.train(data.inputs, data.outputs);
+                });
+              }
+
+              requestAnimationFrame(simulate);
+            }
+
+            // Start simulation
+            simulate();
+        </script>
+    </body>
+</html>
